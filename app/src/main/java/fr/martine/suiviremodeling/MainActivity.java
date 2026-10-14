@@ -16,6 +16,12 @@ public class MainActivity extends Activity {
   web.addJavascriptInterface(new ExportBridge(),"AndroidExport");
   web.setWebViewClient(new WebViewClient(){@Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r){return true;}});
   web.setWebChromeClient(new WebChromeClient(){
+   @Override public boolean onJsConfirm(WebView view,String url,String message,JsResult result){
+    new android.app.AlertDialog.Builder(MainActivity.this).setMessage(message).setPositiveButton("Confirmer",(d,w)->result.confirm()).setNegativeButton("Annuler",(d,w)->result.cancel()).setOnCancelListener(d->result.cancel()).show();return true;
+   }
+   @Override public boolean onJsAlert(WebView view,String url,String message,JsResult result){
+    new android.app.AlertDialog.Builder(MainActivity.this).setMessage(message).setPositiveButton("OK",(d,w)->result.confirm()).setOnCancelListener(d->result.confirm()).show();return true;
+   }
    @Override public boolean onShowFileChooser(WebView v,ValueCallback<Uri[]> cb,FileChooserParams params){
     if(picker!=null)picker.onReceiveValue(null); picker=cb;
     Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("application/json"); startActivityForResult(i,2);return true;
