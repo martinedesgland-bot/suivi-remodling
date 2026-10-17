@@ -95,5 +95,5 @@ function styledWorkbookBytes(wb){
  xml=xml.replace(/<cellXfs count="\d+">[\s\S]*?<\/cellXfs>/,'<cellXfs count="'+(original.length+variants.length)+'">'+original.join('')+variants.join('')+'</cellXfs>');write('xl/styles.xml',xml);
  return new Uint8Array(cfb.write(zip,{type:'buffer',fileType:'zip',compression:true}));
 }
-function exportReportingExcel(){try{const x=p(),wb=buildReportWorkbook(x);XLSX.writeFile(wb,'Reporting_'+x.store.replace(/[^a-z0-9]/gi,'_')+'.xlsx');note('Reporting généré : consulte tes téléchargements.')}catch(e){alert('Export du reporting impossible : '+e.message)}}
+function exportReportingExcel(){try{const x=p(),wb=buildReportWorkbook(x);download('Reporting_'+x.store.replace(/[^a-z0-9]/gi,'_')+'.xlsx',styledWorkbookBytes(wb),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');note('Reporting généré : consulte tes téléchargements.')}catch(e){alert('Export du reporting impossible : '+e.message)}}
 function exportExcel(){try{const x=p(),wb=buildSummaryWorkbook(x);download('Synthese_'+x.store.replace(/[^a-z0-9]/gi,'_')+'.xlsx',styledWorkbookBytes(wb),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');note('Synthèse du chantier générée : consulte tes téléchargements.')}catch(e){alert('Export Excel impossible : '+e.message)}}
