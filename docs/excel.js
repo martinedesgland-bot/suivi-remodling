@@ -125,7 +125,7 @@ function styledWorkbookBytes(wb){
  let xml=read('xl/styles.xml');
  const append=(tag,items)=>{let base=0;xml=xml.replace(new RegExp('<'+tag+' count="(\\d+)">([\\s\\S]*?)</'+tag+'>'),(_,count,body)=>{base=+count;return '<'+tag+' count="'+(base+items.length)+'">'+body+items.join('')+'</'+tag+'>'});return base};
  const fontBase=append('fonts',[['20352A',false,11],['FFFFFF',true,11],['20352A',true,11],['FFFFFF',true,18],['000000',false,7],['FFFF00',false,7],['FF4000',false,22]].map(([color,bold,size])=>'<font>'+(bold?'<b/>':'')+'<sz val="'+size+'"/><color rgb="FF'+color+'"/><name val="Calibri"/></font>'));
- const tones={plain:['FFFFFF',0],title:['006341',3],subtitle:['E2EFDA',2],header:['006341',1],devis:['E8B0DF',0],imagine:['A6DCEF',0],total:['E2EFDA',2],remaining:['FFF2CC',2],overrun:['F8B4B4',2],note:['FFFFFF',0],devisHeader:['CF85C6',2],imagineHeader:['73C5E5',2],modelPlain:['FFFFFF',4],modelPerson:['FFFFFF',4],modelDevis:['E49EDD',4],modelImagine:['83CCEB',4],modelDay:['DAF2D0',4],modelDelta:['FF0000',5],modelArrow:['FFFFFF',6],modelNote:['FFFFFF',4],modelDayDevis:['F2CEEF',4],modelDayImagine:['D4EAF4',4]};
+ const tones={reportHeader:['DAEAF5',2],reportDevis:['E49EDD',0],reportImagine:['41B1DB',0],reportDate:['EAD1E8',0],reportMixed:['E8EFF5',0],reportTotal:['DAEAF5',2],plain:['FFFFFF',0],title:['006341',3],subtitle:['E2EFDA',2],header:['006341',1],devis:['E8B0DF',0],imagine:['A6DCEF',0],total:['E2EFDA',2],remaining:['FFF2CC',2],overrun:['F8B4B4',2],note:['FFFFFF',0],devisHeader:['CF85C6',2],imagineHeader:['73C5E5',2],modelPlain:['FFFFFF',4],modelPerson:['FFFFFF',4],modelDevis:['E49EDD',4],modelImagine:['83CCEB',4],modelDay:['DAF2D0',4],modelDelta:['FF0000',5],modelArrow:['FFFFFF',6],modelNote:['FFFFFF',4],modelDayDevis:['F2CEEF',4],modelDayImagine:['D4EAF4',4]};
  const names=Object.keys(tones),fillBase=append('fills',names.map(n=>'<fill><patternFill patternType="solid"><fgColor rgb="FF'+tones[n][0]+'"/><bgColor indexed="64"/></patternFill></fill>'));
  const borderBase=append('borders',['<border><left style="thin"><color rgb="FFAAB8AE"/></left><right style="thin"><color rgb="FFAAB8AE"/></right><top style="thin"><color rgb="FFAAB8AE"/></top><bottom style="thin"><color rgb="FFAAB8AE"/></bottom><diagonal/></border>']);
  const match=xml.match(/<cellXfs count="(\d+)">([\s\S]*?)<\/cellXfs>/),original=match[2].match(/<xf\b[^>]*(?:\/>|>[\s\S]*?<\/xf>)/g),variants=[],cache=new Map();
@@ -136,12 +136,35 @@ function styledWorkbookBytes(wb){
 }
 function exportFileName(prefix,store,stamp){const d=new Date(stamp),pad=n=>String(n).padStart(2,'0');return prefix+'_'+store.replace(/[^a-z0-9]/gi,'_')+'_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds())+'.xlsx';}
 function recordGeneratedExport(x,kind,stamp){x[kind==='summary'?'lastExportAt':'lastReportingExportAt']=stamp;if(typeof save==='function')save();if(typeof renderExportDates==='function')renderExportDates();}
-function exportReportingExcel(){try{const x=p(),stamp=new Date().toISOString(),wb=buildReportWorkbook({...x,lastReportingExportAt:stamp});download(exportFileName('Reporting',x.store,stamp),styledWorkbookBytes(wb),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');recordGeneratedExport(x,'reporting',stamp);note('Reporting généré : consulte tes téléchargements.')}catch(e){alert('Export du reporting impossible : '+e.message)}}
+// Personal reporting lists only this device's recorded slots; imported progress has no schedules.
+function buildPersonalReportWorkbook(x){
+ const wb=XLSX.utils.book_new(),styles={},rows=[['Date','Jour','Intervenant','Type intervention','Famille','Heure début','Début pause','Fin pause','Heure fin','Temps total (h)','Commentaire']],rowTones=['reportHeader'],totals={Devis:0,Imagine:0};
+ const time=v=>{if(!v)return '';const n=minutes(v);return {t:'n',v:n/1440,z:'h:mm'}};
+ const entries=[...x.entries].sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start)||a.person.localeCompare(b.person,'fr'));
+ for(const e of entries){
+  let h=0;for(const a of e.allocs){if(!['Devis','Imagine'].includes(a.type)||!Number.isFinite(a.h)||a.h<0)throw Error('Saisie d’heures invalide.');h+=a.h;totals[a.type]+=a.h;}
+  if(!Number.isFinite(hours(e))||Math.abs(hours(e)-h)>.001)throw Error('Les heures affectées ne correspondent pas aux horaires de '+e.person+' le '+e.date+'.');
+  const types=[...new Set(e.allocs.map(a=>a.type))],mixed=e.allocs.length>1;
+  const duration=v=>Math.floor(Math.round(v*60)/60)+':'+String(Math.round(v*60)%60).padStart(2,'0');
+  const typeLabel=types.length===1?types[0]:types.map(t=>t+' ('+duration(e.allocs.filter(a=>a.type===t).reduce((n,a)=>n+a.h,0))+')').join(' + ');
+  const family=mixed?e.allocs.map(a=>a.family+' — '+a.type+' '+duration(a.h)).join('\n'):e.allocs[0]?.family||'';
+  rows.push([{t:'n',v:(Date.parse(e.date+'T00:00:00Z')-Date.UTC(1899,11,30))/86400000,z:'dd/mm/yyyy'},e.day||'',e.person,typeLabel,family,time(e.start),e.breakStart===e.breakEnd?'':time(e.breakStart),e.breakStart===e.breakEnd?'':time(e.breakEnd),time(e.end),{t:'n',v:Math.round(h*60)/1440,z:'[h]:mm'},e.comment||'']);
+  rowTones.push(types.length===1?'report'+types[0]:'reportMixed');
+ }
+ rows.push(Array(11).fill(''));rowTones.push('plain');
+ for(const [label,h,tone] of [['TOTAL DEVIS',totals.Devis,'reportDevis'],['TOTAL IMAGINE',totals.Imagine,'reportImagine'],['TOTAL',totals.Devis+totals.Imagine,'reportTotal']]){const row=Array(11).fill('');row[8]=label;row[9]={t:'n',v:Math.round(h*60)/1440,z:'[h]:mm'};rows.push(row);rowTones.push(tone)}
+ const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[100,60,145,165,200,95,95,95,95,115,280].map(wpx=>({wpx}));
+ ws['!rows']=rows.map((r,i)=>({hpt:i===0?30:Math.max(24,Math.min(180,16*Math.max(String(r[4]||'').split('\n').length,Math.ceil(String(r[10]||'').length/35))))}));
+ ws['!autofilter']={ref:'A1:K'+Math.max(1,entries.length+1)};
+ for(let r=0;r<rows.length;r++)for(let col=0;col<11;col++)styles[XLSX.utils.encode_cell({r,c:col})]=r>0&&r<=entries.length&&col===0?'reportDate':rowTones[r];
+ XLSX.utils.book_append_sheet(wb,ws,'Horaires');wb.__reportStyles={Horaires:styles};wb.Props={Title:'Mes horaires — '+x.store+' — '+x.city};return wb;
+}
+function exportReportingExcel(){openExcelPreview('reporting')}
 let pendingSummaryExport=null;
 // Display the same visible sheet whose bytes are saved after the user's review.
-function summaryPreviewHTML(wb){
- const ws=wb.Sheets['Synthèse'],styles=wb.__reportStyles['Synthèse'],range=XLSX.utils.decode_range(ws['!ref']),merges=ws['!merges']||[];
- let html='<table aria-label="Synthèse"><colgroup>';
+function summaryPreviewHTML(wb,sheetName='Synthèse'){
+ const ws=wb.Sheets[sheetName],styles=wb.__reportStyles[sheetName],range=XLSX.utils.decode_range(ws['!ref']),merges=ws['!merges']||[];
+ let html='<table aria-label="'+esc(sheetName)+'"><colgroup>';
  for(let c=0;c<=range.e.c;c++)html+='<col style="width:'+Math.max(48,ws['!cols']?.[c]?.wpx||80)+'px">';
  html+='</colgroup><tbody>';
  for(let r=0;r<=range.e.r;r++){html+='<tr>';for(let c=0;c<=range.e.c;c++){
@@ -151,17 +174,19 @@ function summaryPreviewHTML(wb){
   html+='<td class="'+esc(tone)+'"'+span+'>'+esc(cell?XLSX.utils.format_cell(cell):'')+'</td>';
  }html+='</tr>';}return html+'</tbody></table>';
 }
-function exportExcel(){try{
- const x=p(),stamp=new Date().toISOString(),wb=buildSummaryWorkbook({...x,lastExportAt:stamp});
- const prepared={projectId:x.id,stamp,name:exportFileName('Synthese',x.store,stamp),bytes:styledWorkbookBytes(wb)};
- const html=summaryPreviewHTML(wb);pendingSummaryExport=prepared;
+function exportExcel(){openExcelPreview('summary')}
+function openExcelPreview(kind){try{
+ const x=p(),stamp=new Date().toISOString(),report=kind==='reporting',wb=report?buildPersonalReportWorkbook(x):buildSummaryWorkbook({...x,lastExportAt:stamp});
+ const prepared={projectId:x.id,kind,stamp,name:exportFileName(report?'Reporting':'Synthese',x.store,stamp),bytes:styledWorkbookBytes(wb)};
+ const html=summaryPreviewHTML(wb,report?'Horaires':'Synthèse');pendingSummaryExport=prepared;
+ $('excelPreviewTitle').textContent=report?'Mes horaires pour le reporting':'Aperçu de la synthèse Excel';
  $('excelPreviewIdentity').textContent=x.store+' — '+x.city;
- $('excelPreviewTable').innerHTML=html;$('excelPreviewStatus').textContent='Aucun fichier enregistré. Choisis « Enregistrer le fichier Excel » après vérification.';
+ $('excelPreviewTable').innerHTML=html;$('excelPreviewStatus').textContent=(report&&!x.entries.length?'Aucun horaire saisi sur cet appareil. ':'')+'Aucun fichier enregistré. Choisis « Enregistrer le fichier Excel » après vérification.';
  showTab('excelPreview');$('excelPreview').scrollIntoView({block:'start'});
 }catch(e){pendingSummaryExport=null;alert('Aperçu Excel impossible : '+e.message)}}
 function savePreviewExcel(){try{
- const prepared=pendingSummaryExport,x=p();if(!prepared||!x||prepared.projectId!==x.id)throw Error('Rouvre l’aperçu de la synthèse avant d’enregistrer.');
+ const prepared=pendingSummaryExport,x=p();if(!prepared||!x||prepared.projectId!==x.id)throw Error('Rouvre l’aperçu du fichier avant d’enregistrer.');
  download(prepared.name,prepared.bytes,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
- recordGeneratedExport(x,'summary',prepared.stamp);
+ recordGeneratedExport(x,prepared.kind,prepared.stamp);
  $('excelPreviewStatus').textContent='Enregistrement demandé pour « '+prepared.name+' ». Vérifie l’emplacement proposé par ton appareil.';
 }catch(e){alert('Enregistrement Excel impossible : '+e.message)}}
