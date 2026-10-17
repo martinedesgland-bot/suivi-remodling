@@ -137,5 +137,31 @@ function styledWorkbookBytes(wb){
 function exportFileName(prefix,store,stamp){const d=new Date(stamp),pad=n=>String(n).padStart(2,'0');return prefix+'_'+store.replace(/[^a-z0-9]/gi,'_')+'_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds())+'.xlsx';}
 function recordGeneratedExport(x,kind,stamp){x[kind==='summary'?'lastExportAt':'lastReportingExportAt']=stamp;if(typeof save==='function')save();if(typeof renderExportDates==='function')renderExportDates();}
 function exportReportingExcel(){try{const x=p(),stamp=new Date().toISOString(),wb=buildReportWorkbook({...x,lastReportingExportAt:stamp});download(exportFileName('Reporting',x.store,stamp),styledWorkbookBytes(wb),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');recordGeneratedExport(x,'reporting',stamp);note('Reporting généré : consulte tes téléchargements.')}catch(e){alert('Export du reporting impossible : '+e.message)}}
-function exportExcel(){try{const x=p(),stamp=new Date().toISOString(),wb=buildSummaryWorkbook({...x,lastExportAt:stamp});download(exportFileName('Synthese',x.store,stamp),styledWorkbookBytes(wb),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');recordGeneratedExport(x,'summary',stamp);note('Synthèse du chantier générée : consulte tes téléchargements.')}catch(e){alert('Export Excel impossible : '+e.message)}}
-
+let pendingSummaryExport=null;
+// Display the same visible sheet whose bytes are saved after the user's review.
+function summaryPreviewHTML(wb){
+ const ws=wb.Sheets['Synthèse'],styles=wb.__reportStyles['Synthèse'],range=XLSX.utils.decode_range(ws['!ref']),merges=ws['!merges']||[];
+ let html='<table aria-label="Synthèse"><colgroup>';
+ for(let c=0;c<=range.e.c;c++)html+='<col style="width:'+Math.max(48,ws['!cols']?.[c]?.wpx||80)+'px">';
+ html+='</colgroup><tbody>';
+ for(let r=0;r<=range.e.r;r++){html+='<tr>';for(let c=0;c<=range.e.c;c++){
+  const merge=merges.find(m=>r>=m.s.r&&r<=m.e.r&&c>=m.s.c&&c<=m.e.c);if(merge&&(r!==merge.s.r||c!==merge.s.c))continue;
+  const ref=XLSX.utils.encode_cell({r,c}),cell=ws[ref],tone=styles[ref]||'modelPlain';
+  const span=merge?' colspan="'+(merge.e.c-merge.s.c+1)+'" rowspan="'+(merge.e.r-merge.s.r+1)+'"':'';
+  html+='<td class="'+esc(tone)+'"'+span+'>'+esc(cell?XLSX.utils.format_cell(cell):'')+'</td>';
+ }html+='</tr>';}return html+'</tbody></table>';
+}
+function exportExcel(){try{
+ const x=p(),stamp=new Date().toISOString(),wb=buildSummaryWorkbook({...x,lastExportAt:stamp});
+ const prepared={projectId:x.id,stamp,name:exportFileName('Synthese',x.store,stamp),bytes:styledWorkbookBytes(wb)};
+ const html=summaryPreviewHTML(wb);pendingSummaryExport=prepared;
+ $('excelPreviewIdentity').textContent=x.store+' — '+x.city;
+ $('excelPreviewTable').innerHTML=html;$('excelPreviewStatus').textContent='Aucun fichier enregistré. Choisis « Enregistrer le fichier Excel » après vérification.';
+ showTab('excelPreview');$('excelPreview').scrollIntoView({block:'start'});
+}catch(e){pendingSummaryExport=null;alert('Aperçu Excel impossible : '+e.message)}}
+function savePreviewExcel(){try{
+ const prepared=pendingSummaryExport,x=p();if(!prepared||!x||prepared.projectId!==x.id)throw Error('Rouvre l’aperçu de la synthèse avant d’enregistrer.');
+ download(prepared.name,prepared.bytes,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+ recordGeneratedExport(x,'summary',prepared.stamp);
+ $('excelPreviewStatus').textContent='Enregistrement demandé pour « '+prepared.name+' ». Vérifie l’emplacement proposé par ton appareil.';
+}catch(e){alert('Enregistrement Excel impossible : '+e.message)}}
