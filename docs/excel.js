@@ -177,16 +177,19 @@ function summaryPreviewHTML(wb,sheetName='Synthèse'){
 function exportExcel(){openExcelPreview('summary')}
 function openExcelPreview(kind){try{
  const x=p(),stamp=new Date().toISOString(),report=kind==='reporting',wb=report?buildPersonalReportWorkbook(x):buildSummaryWorkbook({...x,lastExportAt:stamp});
- const prepared={projectId:x.id,kind,stamp,name:exportFileName(report?'Reporting':'Synthese',x.store,stamp),bytes:styledWorkbookBytes(wb)};
+ const prepared={projectId:x.id,kind,stamp,empty:report&&!x.entries.length,name:exportFileName(report?'Reporting':'Synthese',x.store,stamp),bytes:styledWorkbookBytes(wb)};
  const html=summaryPreviewHTML(wb,report?'Horaires':'Synthèse');pendingSummaryExport=prepared;
  $('handoverFallback').classList.add('hide');$('openHandoverButton').classList.toggle('hide',report);
  $('excelPreviewTitle').textContent=report?'Mes horaires pour le reporting':'Aperçu de la synthèse Excel';
  $('excelPreviewIdentity').textContent=x.store+' — '+x.city;
- $('excelPreviewTable').innerHTML=html;$('excelPreviewStatus').textContent=(report&&!x.entries.length?'Aucun horaire saisi sur cet appareil. ':'')+'Aucun fichier enregistré. Choisis « Enregistrer le fichier Excel » après vérification.';
+ $('reportingEmpty')?.classList.toggle('hide',!prepared.empty);if($('reportingEmptyText'))$('reportingEmptyText').textContent=prepared.empty?(x.prior?'Ce chantier contient un avancement repris depuis Excel, mais aucun horaire détaillé enregistré sur cet appareil. La synthèse partagée transmet les totaux, pas les heures de début, pause et fin.':'Aucune journée n’est enregistrée pour ce chantier sur cet appareil. Enregistre les plages de travail dans « Saisie des heures » pour les retrouver dans ton reporting.'):'';
+ $('savePreviewExcel').disabled=!!prepared.empty;$('savePreviewExcel').textContent=report?'Enregistrer mes horaires (Excel)':'Enregistrer le fichier Excel';
+ $('excelPreviewTable').innerHTML=html;$('excelPreviewStatus').textContent=prepared.empty?'Aucun fichier enregistré : il n’y a pas encore d’horaires à exporter.':report?x.entries.length+' saisie(s) enregistrée(s) dans ce chantier. Vérifie le tableau, puis choisis « Enregistrer mes horaires (Excel) ».':'Aucun fichier enregistré. Choisis « Enregistrer le fichier Excel » après vérification.';
  showTab('excelPreview');$('excelPreview').scrollIntoView({block:'start'});
 }catch(e){pendingSummaryExport=null;alert('Aperçu Excel impossible : '+e.message)}}
 function savePreviewExcel(){try{
  const prepared=pendingSummaryExport,x=p();if(!prepared||!x||prepared.projectId!==x.id)throw Error('Rouvre l’aperçu du fichier avant d’enregistrer.');
+ if(prepared.empty)throw Error('Aucun horaire n’est enregistré pour ce chantier sur cet appareil. Ouvre la saisie des heures.');
  download(prepared.name,prepared.bytes,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
  recordGeneratedExport(x,prepared.kind,prepared.stamp);
  $('excelPreviewStatus').textContent='Enregistrement demandé pour « '+prepared.name+' ». Vérifie l’emplacement proposé par ton appareil.';
