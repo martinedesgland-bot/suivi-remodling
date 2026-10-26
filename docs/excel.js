@@ -179,6 +179,7 @@ function openExcelPreview(kind){try{
  const x=p(),stamp=new Date().toISOString(),report=kind==='reporting',wb=report?buildPersonalReportWorkbook(x):buildSummaryWorkbook({...x,lastExportAt:stamp});
  const prepared={projectId:x.id,kind,stamp,name:exportFileName(report?'Reporting':'Synthese',x.store,stamp),bytes:styledWorkbookBytes(wb)};
  const html=summaryPreviewHTML(wb,report?'Horaires':'Synthèse');pendingSummaryExport=prepared;
+ $('handoverPanel').classList.add('hide');$('handoverFallback').classList.add('hide');$('openHandoverButton').classList.toggle('hide',report);
  $('excelPreviewTitle').textContent=report?'Mes horaires pour le reporting':'Aperçu de la synthèse Excel';
  $('excelPreviewIdentity').textContent=x.store+' — '+x.city;
  $('excelPreviewTable').innerHTML=html;$('excelPreviewStatus').textContent=(report&&!x.entries.length?'Aucun horaire saisi sur cet appareil. ':'')+'Aucun fichier enregistré. Choisis « Enregistrer le fichier Excel » après vérification.';
